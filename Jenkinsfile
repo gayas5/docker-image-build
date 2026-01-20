@@ -3,23 +3,33 @@ pipeline {
 
     environment {
         DOCKERHUB_REPO = "gayas555/nginx-app"
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"          // e.g. 42
+        IMAGE_TAG      = "${env.BUILD_NUMBER}"   // e.g. #5, #6, ...
         LATEST_TAG     = "latest"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout scm  // Simpler than explicit git; uses the repo configured in the job
+                checkout scm   // Uses the repo/branch already configured in the job
+            }
+        }
+
+        stage('Verify Files') {
+            steps {
+                sh '''
+                    ls -la
+                    test -f Dockerfile   || { echo "ERROR: Dockerfile missing"; exit 1; }
+                    test -f index.html   || { echo "ERROR: index.html missing – add it to repo root!"; exit 1; }
+                '''
             }
         }
 
         stage('Build Image') {
             steps {
                 script {
-                    // Build once, tag multiple times
-                    def image = docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
-                    image.tag("${LATEST_TAG}")
+                    docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
+                    // Optional: also tag as latest right away
+                    sh "docker tag ${DOCKERHUB_REPO}:${IMAGE_TAG} ${DOCKERHUB_REPO}:${LATEST_TAG}"
                 }
             }
         }
@@ -47,7 +57,10 @@ pipeline {
             sh 'docker logout || true'
         }
         success {
-            echo "Pushed: ${DOCKERHUB_REPO}:${IMAGE_TAG} and :latest"
+            echo "Successfully pushed ${DOCKERHUB_REPO}:${IMAGE_TAG} and :${LATEST_TAG}"
+        }
+        failure {
+            echo "Build or push failed"
         }
     }
 }
