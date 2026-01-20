@@ -24,32 +24,25 @@ pipeline {
             }
         }
 
-        stage('Build Image') {
-            steps {
-                script {
-                    docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
-                    // Optional: also tag as latest right away
-                    sh "docker tag ${DOCKERHUB_REPO}:${IMAGE_TAG} ${DOCKERHUB_REPO}:${LATEST_TAG}"
-                }
-            }
-        }
+       stage('Build Image') {
+    steps {
+        sh 'docker build -t gayas5/your-app-name:${BUILD_NUMBER} .'
+    }
+}
 
-        stage('Push Images') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
-                )]) {
-                    sh '''
-                        echo "$PASS" | docker login -u "$USER" --password-stdin
-                        docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
-                        docker push ${DOCKERHUB_REPO}:${LATEST_TAG}
-                    '''
-                }
-            }
+stage('Push Images') {
+    when { expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' } }
+    steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+            sh '''
+                echo $PASS | docker login -u $USER --password-stdin
+                docker push gayas5/your-app-name:${BUILD_NUMBER}
+                docker tag gayas5/your-app-name:${BUILD_NUMBER} gayas5/your-app-name:latest
+                docker push gayas5/your-app-name:latest
+            '''
         }
     }
+}
 
     post {
         always {
