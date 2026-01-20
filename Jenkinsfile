@@ -3,11 +3,12 @@ pipeline {
 
     environment {
         DOCKERHUB_REPO = "gayas555/nginx-app"
-        IMAGE_TAG      = "${env.BUILD_NUMBER}"
+        IMAGE_TAG      = "${BUILD_NUMBER}"
         LATEST_TAG     = "latest"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -17,35 +18,39 @@ pipeline {
         stage('Verify Files') {
             steps {
                 sh '''
+                    set -e
                     ls -la
-                    test -f Dockerfile || { echo "ERROR: Dockerfile missing"; exit 1; }
-                    test -f index.html || { echo "ERROR: index.html missing"; exit 1; }
+                    [ -f Dockerfile ] || { echo "Dockerfile missing"; exit 1; }
+                    [ -f index.html ] || { echo "index.html missing"; exit 1; }
                 '''
             }
         }
 
         stage('Build Image') {
             steps {
-                sh """
+                sh '''
                     docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
                     docker tag ${DOCKERHUB_REPO}:${IMAGE_TAG} ${DOCKERHUB_REPO}:${LATEST_TAG}
-                """
+                '''
             }
         }
 
-        stage('Login & Push') {
-            when { expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' } }
+        stage('Docker Login & Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',  // Jenkins credential ID
-                    usernameVariable: 'DH_USER',
-                    passwordVariable: 'DH_PAT'        // Using PAT instead of password
-                )]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_TOKEN'
+                    )
+                ]) {
                     sh '''
-                        echo "Logging in as Docker user: $DH_USER"
-                        echo "$DH_PAT" | docker login -u "$DH_USER" --password-stdin
+                        set -e
+                        echo "Logging in to Docker Hub as $DOCKER_USER"
 
-                        # Push both tags
+                        echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USER" --password-stdin
+
+                        echo "Pushing images..."
                         docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
                         docker push ${DOCKERHUB_REPO}:${LATEST_TAG}
                     '''
@@ -56,14 +61,14 @@ pipeline {
 
     post {
         always {
-            sh 'docker image prune -f || true'
-            sh 'docker logout || true'
+            docker logout || true
+            docker image prune -f || true
         }
         success {
-            echo "Successfully pushed ${DOCKERHUB_REPO}:${IMAGE_TAG} and :${LATEST_TAG}"
+            echo "✅ Image pushed successfully: ${DOCKERHUB_REPO}:${IMAGE_TAG}"
         }
         failure {
-            echo "Build or push failed - check logs above (especially docker login step)"
+            echo "❌ Pipeline failed – check Docker login or permissions"
         }
     }
 }
