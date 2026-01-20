@@ -18,8 +18,8 @@ pipeline {
             steps {
                 sh '''
                     ls -la
-                    test -f Dockerfile   || { echo "ERROR: Dockerfile missing"; exit 1; }
-                    test -f index.html   || { echo "ERROR: index.html missing"; exit 1; }
+                    test -f Dockerfile || { echo "ERROR: Dockerfile missing"; exit 1; }
+                    test -f index.html || { echo "ERROR: index.html missing"; exit 1; }
                 '''
             }
         }
@@ -37,18 +37,15 @@ pipeline {
             when { expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' } }
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
+                    credentialsId: 'dockerhub-creds',  // Jenkins credential ID
                     usernameVariable: 'DH_USER',
-                    passwordVariable: 'DH_PASS'
+                    passwordVariable: 'DH_PAT'        // Using PAT instead of password
                 )]) {
                     sh '''
-                        # Debug (careful - username is not secret)
-                        echo "Logging in as user: $DH_USER"
-                        
-                        # The secure way
-                        echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-                        
-                        # If login succeeds → push
+                        echo "Logging in as Docker user: $DH_USER"
+                        echo "$DH_PAT" | docker login -u "$DH_USER" --password-stdin
+
+                        # Push both tags
                         docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
                         docker push ${DOCKERHUB_REPO}:${LATEST_TAG}
                     '''
