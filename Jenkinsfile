@@ -26,9 +26,20 @@ pipeline {
             }
         }
 
+        stage('Verify Docker') {
+            steps {
+                sh '''
+                    set -e
+                    docker --version
+                    docker info >/dev/null
+                '''
+            }
+        }
+
         stage('Build Image') {
             steps {
                 sh '''
+                    set -e
                     docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
                     docker tag ${DOCKERHUB_REPO}:${IMAGE_TAG} ${DOCKERHUB_REPO}:${LATEST_TAG}
                 '''
@@ -63,10 +74,10 @@ pipeline {
             sh 'docker image prune -f || true'
         }
         success {
-            echo "✅ Image pushed successfully: ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+            echo "Image pushed successfully: ${DOCKERHUB_REPO}:${IMAGE_TAG}"
         }
         failure {
-            echo "❌ Pipeline failed – check logs above"
+            echo "Pipeline failed – check logs above"
         }
     }
 }
