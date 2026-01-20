@@ -54,3 +54,19 @@ pipeline {
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
+            sh 'docker image prune -f || true'
+        }
+        success {
+            echo "✅ Image pushed successfully: ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+        }
+        failure {
+            echo "❌ Pipeline failed – check logs above"
+        }
+    }
+}
