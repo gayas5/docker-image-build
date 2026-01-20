@@ -2,51 +2,39 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "gayas555/nginx-app"
-        IMAGE_TAG  = "v1"
+        DOCKERHUB_REPO = "gayas555/nginx-app"
+        IMAGE_TAG      = "${env.BUILD_NUMBER}"          // e.g. 42
+        LATEST_TAG     = "latest"
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/gayas5/docker-image-build.git'
+                checkout scm  // Simpler than explicit git; uses the repo configured in the job
             }
         }
 
-        stage('Verify Files') {
+        stage('Build Image') {
             steps {
-                sh '''
-                    pwd
-                    ls -la
-                    if [ ! -f index.html ]; then
-                        echo "ERROR: index.html is missing in repo root!"
-                        exit 1
-                    fi
-                    if [ ! -f Dockerfile ]; then
-                        echo "ERROR: Dockerfile missing!"
-                        exit 1
-                    fi
-                '''
+                script {
+                    // Build once, tag multiple times
+                    def image = docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}")
+                    image.tag("${LATEST_TAG}")
+                }
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
-            }
-        }
-
-        stage('Push Docker Image') {
+        stage('Push Images') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',  // Make sure this credential exists in Jenkins
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
                 )]) {
                     sh '''
-                        echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                        echo "$PASS" | docker login -u "$USER" --password-stdin
+                        docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                        docker push ${DOCKERHUB_REPO}:${LATEST_TAG}
                     '''
                 }
             }
@@ -54,14 +42,12 @@ pipeline {
     }
 
     post {
-        success {
-            echo "Docker Image Built & Pushed Successfully → ${IMAGE_NAME}:${IMAGE_TAG}"
-        }
-        failure {
-            echo "Docker Image Build or Push Failed"
-        }
         always {
-            sh 'docker logout || true'  // Clean up login
+            sh 'docker image prune -f || true'
+            sh 'docker logout || true'
+        }
+        success {
+            echo "Pushed: ${DOCKERHUB_REPO}:${IMAGE_TAG} and :latest"
         }
     }
 }
